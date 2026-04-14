@@ -1,0 +1,5 @@
+anthropic
+youtube-transcript-api
+feedparser
+requests
+certifi
