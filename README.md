@@ -1,30 +1,36 @@
 # YouTube Research Digest
 
-A fully automated pipeline that monitors 28 curated YouTube channels daily, fetches transcripts for new videos, generates deep research briefs using Claude, and emails a digest to your inbox.
+A self-hosted pipeline that monitors YouTube channels daily, fetches transcripts for new long-form videos, generates deep research briefs using Claude AI, and emails you a digest — no YouTube API key required.
 
-## What It Does
+## How It Works
 
-1. **Scans 28 YouTube channels** via RSS feeds (no YouTube API key required)
-2. **Finds videos published in the last 48 hours** across all channels
-3. **Fetches transcripts** using `youtube-transcript-api` (skips videos under 15 minutes)
-4. **Analyzes each transcript** with Claude Sonnet using a structured 5-step research prompt covering executive summary, key insights, time-coded breakdown, structured tables, critical thinking, and strategic reflection
-5. **Saves each analysis** as a Markdown file in the `analyses/` directory
-6. **Emails a full digest** to your Gmail address
-7. **Deduplicates** via `processed_videos.json` — videos are never emailed twice
+1. **Scans your channels** via YouTube RSS feeds
+2. **Finds videos published in the last 48 hours** and skips anything under 15 minutes
+3. **Fetches transcripts** using `youtube-transcript-api` (falls back to yt-dlp if RSS is unavailable)
+4. **Analyzes each transcript** with Claude Sonnet using a structured 5-step research prompt:
+   - Executive summary
+   - Key insights and takeaways
+   - Time-coded breakdown
+   - Structured tables (people, companies, concepts mentioned)
+   - Critical analysis and strategic reflection
+5. **Saves each analysis** as a Markdown file in `analyses/`
+6. **Emails a full digest** to your inbox
+7. **Deduplicates** via `processed_videos.json` — videos are never emailed twice even with the 48h window
 
-## Channels Monitored
+## Prerequisites
 
-Covers a curated mix of AI/ML, product, VC/startup, and podcast channels:
-
-20VC, a16z, Acquired, All-In, AI Explained, Andrej Karpathy, BeABetterDev, Bg2Pod, BigThinkPlus, ByteByteGo, Code Emporium, David Senra, Dwarkesh Patel, Grow Product, How I AI, Invest Like the Best, Lenny's Podcast, Lex Fridman, Matthew Berman, No Priors, Peter Yang, Product Thinking, Sourcery VC, Stanford Engineering, TBPN, The Diary of a CEO, This Week in Startups, YC Root Access
-
-See `channels.txt` for the full list of handles.
+- Python 3.9+
+- An [Anthropic API key](https://console.anthropic.com/)
+- A Gmail account with [App Passwords](https://support.google.com/accounts/answer/185833) enabled
+- `yt-dlp` available (installed automatically via requirements)
 
 ## Setup
 
-### 1. Install dependencies
+### 1. Clone and install dependencies
 
 ```bash
+git clone https://github.com/sumit-bhutani/youtube-digest.git
+cd youtube-digest
 pip install -r requirements.txt
 ```
 
@@ -33,20 +39,32 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```
-ANTHROPIC_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_anthropic_key
 GMAIL_ADDRESS=your@gmail.com
-GMAIL_APP_PASSWORD=your_app_password
+GMAIL_APP_PASSWORD=your_gmail_app_password
 ```
 
 To generate a Gmail App Password: Google Account → Security → 2-Step Verification → App Passwords
 
-### 3. Run manually
+### 3. Customize your channels
+
+Edit `channels.txt` — one YouTube handle per line:
+
+```
+@lexfridman
+@a16z
+@LennysPodcast
+```
+
+Then update `channel_ids.json` with the corresponding YouTube channel IDs (needed for RSS feeds). You can find a channel's ID by visiting their YouTube page and checking the URL or using a tool like [Comment Picker](https://commentpicker.com/youtube-channel-id.php).
+
+### 4. Run manually
 
 ```bash
 python analyze_channels.py
 ```
 
-### 4. Automate with launchd (macOS)
+### 5. Automate with launchd (macOS)
 
 To run daily at 9pm, create `~/Library/LaunchAgents/com.youtube.digest.plist`:
 
@@ -79,24 +97,35 @@ To run daily at 9pm, create `~/Library/LaunchAgents/com.youtube.digest.plist`:
 </plist>
 ```
 
-Then load it:
+Load it:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.youtube.digest.plist
 ```
 
+For Linux, use a cron job instead:
+
+```bash
+0 21 * * * /usr/bin/python3 /path/to/youtube-digest/analyze_channels.py >> /path/to/digest.log 2>&1
+```
+
 ## Output
 
-- **Markdown files** saved to `analyses/YYYY-MM-DD_channel_title.md`
-- **Email digest** sent to the configured Gmail address with all analyses
+Each analysis is saved as a Markdown file:
+
+```
+analyses/2026-04-13_LennysPodcast_An_AI_state_of_the_union.md
+```
+
+And emailed as a digest with all analyses for the day concatenated.
 
 ## File Structure
 
 ```
 youtube-digest/
 ├── analyze_channels.py      # Main script
-├── channels.txt             # 28 channel handles
-├── channel_ids.json         # Pre-resolved channel IDs
+├── channels.txt             # YouTube handles to monitor
+├── channel_ids.json         # Pre-resolved channel IDs (for RSS)
 ├── processed_videos.json    # Tracks analyzed video IDs (dedup)
 ├── requirements.txt         # Python dependencies
 ├── .env                     # Secrets (never committed)
@@ -104,8 +133,16 @@ youtube-digest/
 └── analyses/                # Generated markdown analyses
 ```
 
+## Customization
+
+- **Change channels** — edit `channels.txt` and `channel_ids.json`
+- **Change the analysis prompt** — edit `ANALYSIS_PROMPT` in `analyze_channels.py`
+- **Change the minimum video length** — edit the `< 900` threshold in `fetch_transcript()` (900 seconds = 15 minutes)
+- **Change the lookback window** — edit `timedelta(hours=48)` in `main()`
+
 ## Notes
 
-- Videos without available transcripts are skipped (auto-generated captions can take hours after publish — the 48h window ensures they're retried)
-- Runs locally via launchd; does not require cloud infrastructure
-- RSS feeds are used as primary source; yt-dlp is the fallback
+- No YouTube Data API key required — uses public RSS feeds
+- Auto-generated captions can take hours after a video is published; the 48h window ensures nothing is missed
+- Runs entirely locally — no cloud infrastructure needed
+- RSS feeds work best from residential IPs; cloud servers may be blocked by YouTube
